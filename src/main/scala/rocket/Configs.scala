@@ -200,6 +200,80 @@ class With1TinyCore extends Config((site, here, up) => {
   case ClustersLocated(_) => Nil
 })
 
+class WithRV32Cores(
+  n: Int,
+  crossing: RocketCrossingParams = RocketCrossingParams()
+) extends Config((site, here, up) => {
+  case TilesLocated(InSubsystem) => {
+    val prev = up(TilesLocated(InSubsystem), site)
+    val idOffset = up(NumTiles)
+    val small = RocketTileParams(
+      core = RocketCoreParams(
+        xLen = 32,
+        pgLevels = 2,
+        useVM = false,
+        fpu = None
+      ),
+      btb = None,
+      dcache = Some(DCacheParams(
+        rowBits = site(SystemBusKey).beatBits,
+        nSets = 64,
+        nWays = 1,
+        nTLBSets = 1,
+        nTLBWays = 4,
+        nMSHRs = 0,
+        blockBytes = site(CacheBlockBytes))),
+      icache = Some(ICacheParams(
+        rowBits = site(SystemBusKey).beatBits,
+        nSets = 64,
+        nWays = 1,
+        nTLBSets = 1,
+        nTLBWays = 4,
+        blockBytes = site(CacheBlockBytes))))
+    List.tabulate(n)(i => RocketTileAttachParams(
+      small.copy(tileId = i + idOffset),
+      crossing
+    )) ++ prev
+  }
+  case NumTiles => up(NumTiles) + n
+})
+
+
+class WithOneRV32Core extends Config((site, here, up) => {
+  case TilesLocated(InSubsystem) => {
+    val tile = RocketTileParams(
+      core = RocketCoreParams(
+        xLen   = 32,                 // RV32
+        useVM  = false,              // sem paginação (sv32 opcional se quiser)
+        fpu    = None,
+        mulDiv = Some(MulDivParams(mulUnroll = 8))
+      ),
+      dcache = Some(DCacheParams(
+          rowBits = site(SystemBusKey).beatBits,
+          nSets = 64,
+          nWays = 1,
+          nTLBSets = 1,
+          nTLBWays = 4,
+          nMSHRs = 0,
+          blockBytes = site(CacheBlockBytes))),
+        icache = Some(ICacheParams(
+          rowBits = site(SystemBusKey).beatBits,
+          nSets = 64,
+          nWays = 1,
+          nTLBSets = 1,
+          nTLBWays = 4,
+          blockBytes = site(CacheBlockBytes)))
+    )
+    List(RocketTileAttachParams(
+      tile,
+      RocketCrossingParams(
+        crossingType = SynchronousCrossing(),
+        master = HierarchicalElementMasterPortParams())
+    ))
+  }
+  case NumTiles => 1
+})
+
 class RocketTileAttachConfig(f: RocketTileAttachParams => RocketTileAttachParams) extends TileAttachConfig[RocketTileAttachParams](f)
 
 class RocketTileConfig(f: RocketTileParams => RocketTileParams) extends RocketTileAttachConfig(tp => tp.copy(
